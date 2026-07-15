@@ -1,0 +1,11 @@
+.astro
+.git
+.env
+airflow_settings.yaml
+logs/
+__pycache__/
+# standalone reference copies of the task deliverables — not needed in the image
+fixed_script.sql
+forecast_script.sql
+pipeline.py
+investigation.sql

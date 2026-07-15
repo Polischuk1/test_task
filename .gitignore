@@ -1,0 +1,9 @@
+.astro/.registry.json
+airflow_settings.yaml
+__pycache__/
+*.pyc
+.env
+logs/
+airflow.db
+airflow.cfg
+webserver_config.py

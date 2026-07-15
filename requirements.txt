@@ -1,0 +1,5 @@
+# Providers used by the DAGs. Astro Runtime already bundles postgres/common-sql
+# on most versions; listing them keeps the project explicit and portable.
+apache-airflow-providers-postgres
+apache-airflow-providers-common-sql
+apache-airflow-providers-slack
