@@ -1,28 +1,42 @@
 # LTV forecast pipeline (Astronomer / Airflow)
 
-Two scheduled DAGs that turn a per-user **1-month** revenue forecast into a
-**3-month** LTV forecast:
+Turns a per-user **1-month** revenue forecast into a **3-month** one, and runs it
+automatically on a schedule (Airflow, hosted on Astronomer).
 
-| DAG | Schedule | What it does |
-|-----|----------|--------------|
-| `ltv_coefficients_monthly` | `@monthly` | Rebuilds revenue-growth coefficients from the freshly-matured cohort and appends them to the `coefficients` history table (one `kpi_dt`/month). |
-| `ltv_forecast_hourly` | `@hourly` | Validates the input batch, then upserts `forecast_3m = forecast_1m × (1 + coeff)` per user into `user_forecast_3m`. If a check fails, it writes nothing and alerts Slack. |
+## What's in here — start here
 
-The coefficient logic reproduces the finance etalon `coeffs_expected` exactly
-(60/60 segments). See the root `fixed_script.sql` / `forecast_script.sql` for the
-standalone, annotated versions and `pipeline.py` for the non-Airflow reference.
+| Where | What it is |
+|---|---|
+| **`fixed_script.sql`** | **Part 1** — the corrected coefficients query.  |
+| **`forecast_script.sql`** | **Part 2** — the forecast query. Turns each user's 1-month forecast into a 3-month one (`forecast_3m = forecast_1m × (1 + multiplier)`). |
+| **`screenshoots/`** | Screenshots of everything running — the pipes in Airflow, the data loaded in Postgres, and the Slack alert. |
+| **`dags/`** | The two **pipes** that run it all on a schedule — explained just below. |
+| `include/sql/` | The same SQL as the two scripts above, wired for the pipes (parametrised + writes straight to the tables). |
+| `include/` | Supporting code: connection ids (`config.py`), the Slack alert (`notifications.py`), the data-quality checks (`quality_checks.py`). |
 
-## Project layout
-```
-dags/          ltv_coefficients_monthly.py, ltv_forecast_hourly.py
-include/
-  sql/         build_coefficients.sql, upsert_forecast_3m.sql, ddl.sql  (canonical SQL)
-  config.py    connection ids + quality thresholds (env-overridable)
-  notifications.py  Slack on_failure_callback
-  quality_checks.py pre-computation data-quality gate
-tests/dags/    test_dag_integrity.py
-Dockerfile requirements.txt   Astro runtime + providers
-```
+## The two pipes — what runs automatically
+
+A "pipe" is just a job that Airflow runs on a schedule and shows as green (ok) or
+red (failed). There are two, and each is one of the SQL scripts above, automated:
+
+| Pipe | Runs | In plain words | Under the hood |
+|---|---|---|---|
+| **`ltv_coefficients_monthly`** | once a month | Recalculates the growth multipliers from users who now have a full 3 months of history, and saves them. | `fixed_script.sql` → fills the `coefficients` table |
+| **`ltv_forecast_hourly`** | every hour | Checks the incoming data looks sane, then refreshes every user's 3-month forecast. If a check fails it writes nothing and pings Slack. | `forecast_script.sql` → updates the `user_forecast_3m` table |
+
+(`pipeline.py` is a plain-Python version of the hourly pipe, kept as a
+non-Airflow reference.)
+
+## Screenshots
+In [`screenshoots/`](screenshoots/):
+
+| The two pipes in Airflow | Data loaded in Postgres |
+|---|---|
+| ![DAGs in Airflow](screenshoots/DAGs_in_airflow.png) | ![Tables in Postgres](screenshoots/tables_in_postgres.png) |
+| **Monthly pipe run** | **Hourly pipe run** |
+| ![Monthly coefficients pipe](screenshoots/ltv_pipe_coef_monthly.png) | ![Hourly forecast pipe](screenshoots/ltv_forecast_hourly.png) |
+| **Slack alert on a failed run** | |
+| ![Slack alert](screenshoots/alerts_slack.png) | |
 
 ## Connections (create in Astro UI, or locally in `airflow_settings.yaml`)
 - **`postgres_ltv`** (Postgres) — the DB with `users`, `payments`, `forecast_1m`
